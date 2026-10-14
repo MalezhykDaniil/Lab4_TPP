@@ -3,77 +3,49 @@
 #include <iomanip>
 #include <cmath>
 
-using GaussianEliminationFunc = int (*)(
-    double* matrix,
-    int n
-    );
+using namespace std;
 
-using SolveFunc = int (*)(
-    const double* A,
-    const double* b,
-    double* x,
-    int n
-    );
-
-using ResidualFunc = double (*)(
-    const double* A,
-    const double* b,
-    const double* x,
-    int n
-    );
-
-using CheckSolutionFunc = int (*)(
-    const double* A,
-    const double* b,
-    const double* x,
-    int n,
-    double tolerance
-    );
+using SolveFunc = int (*)(const double*, const double*, double*, int);
+using ResidualFunc = double (*)(const double*, const double*, const double*, int);
+using CheckSolutionFunc = int (*)(const double*, const double*, const double*, int, double);
+using GaussianFunc = int (*)(double*, int);
 
 int main()
 {
-    std::cout << std::fixed << std::setprecision(6);
-
     HMODULE dll = LoadLibraryW(L"LinearSystemLib.dll");
 
     if (!dll)
     {
-        std::cerr << "Cannot load LinearSystemLib.dll. Error: "
+        cerr << "Cannot load LinearSystemLib.dll. Error: "
             << GetLastError() << '\n';
         return 1;
     }
 
-    std::cout << "LinearSystemLib.dll loaded successfully!\n\n";
+    auto solve = reinterpret_cast<SolveFunc>(
+        GetProcAddress(dll, "solve"));
 
-    auto gaussianElimination =
-        reinterpret_cast<GaussianEliminationFunc>(
-            GetProcAddress(dll, "gaussianElimination"));
+    auto residual = reinterpret_cast<ResidualFunc>(
+        GetProcAddress(dll, "residual"));
 
-    auto solve =
-        reinterpret_cast<SolveFunc>(
-            GetProcAddress(dll, "solve"));
+    auto checkSolution = reinterpret_cast<CheckSolutionFunc>(
+        GetProcAddress(dll, "checkSolution"));
 
-    auto residual =
-        reinterpret_cast<ResidualFunc>(
-            GetProcAddress(dll, "residual"));
+    auto gaussianElimination = reinterpret_cast<GaussianFunc>(
+        GetProcAddress(dll, "gaussianElimination"));
 
-    auto checkSolution =
-        reinterpret_cast<CheckSolutionFunc>(
-            GetProcAddress(dll, "checkSolution"));
-
-    if (!gaussianElimination ||
-        !solve ||
-        !residual ||
-        !checkSolution)
+    if (!solve || !residual || !checkSolution || !gaussianElimination)
     {
-        std::cerr << "Cannot find all required functions. Error: "
+        cerr << "Cannot find all functions. Error: "
             << GetLastError() << '\n';
 
         FreeLibrary(dll);
         return 1;
     }
 
-    std::cout << "All four functions found!\n\n";
+    cout << fixed << setprecision(6);
+    cout << "=== LINEAR SYSTEM SDK: EXPLICIT LINKING ===\n";
+
+    cout << "\n[TEST 1] Normal system\n";
 
     const int n = 3;
 
@@ -84,71 +56,102 @@ int main()
     };
 
     const double b[n] = { 8, -11, -3 };
-
     double x[n] = {};
 
-    std::cout << "=== solve ===\n";
+    cout << "Status: " << solve(A, b, x, n) << '\n';
 
-    int solveStatus = solve(A, b, x, n);
+    cout << "Solution: ";
+    for (int i = 0; i < n; i++)
+        cout << x[i] << " ";
 
-    std::cout << "Status: " << solveStatus << '\n';
+    cout << "\nExpected: 2 3 -1\n";
+    cout << "Residual: " << residual(A, b, x, n) << '\n';
+    cout << "Check: " << checkSolution(A, b, x, n, 1e-9) << '\n';
 
-    std::cout << "Solution:\n";
+    cout << "\n[TEST 2] Zero size\n";
 
-    for (int i = 0; i < n; ++i)
+    double dummyA[] = { 1 };
+    double dummyB[] = { 1 };
+    double dummyX[] = { 0 };
+
+    cout << "Returned status: "
+        << solve(dummyA, dummyB, dummyX, 0) << '\n';
+
+    cout << "\n[TEST 3] Negative size\n";
+
+    cout << "Returned status: "
+        << solve(dummyA, dummyB, dummyX, -1) << '\n';
+
+    cout << "\n[TEST 4] Singular matrix\n";
+
+    const double singularA[] = { 1, 2, 2, 4 };
+    const double singularB[] = { 3, 6 };
+    double singularX[2] = {};
+
+    cout << "Status: "
+        << solve(singularA, singularB, singularX, 2) << '\n';
+
+    cout << "Solution: "
+        << singularX[0] << " " << singularX[1] << '\n';
+
+    cout << "\n[TEST 5] Negative tolerance\n";
+
+    cout << "Returned value: "
+        << checkSolution(A, b, x, n, -1.0) << '\n';
+
+    cout << "\n[TEST 6] Large numeric values\n";
+
+    const double largeA[] = { 1e100, 0, 0, 1e100 };
+    const double largeB[] = { 1e100, 1e100 };
+    double largeX[2] = {};
+
+    cout << "Status: "
+        << solve(largeA, largeB, largeX, 2) << '\n';
+
+    cout << "Solution: "
+        << largeX[0] << " " << largeX[1] << '\n';
+
+    cout << "\n[TEST 7] Large system (128x128)\n";
+
+    const int bigN = 128;
+
+    double* bigA = new double[bigN * bigN]();
+    double* bigB = new double[bigN]();
+    double* bigX = new double[bigN]();
+
+    for (int i = 0; i < bigN; i++)
     {
-        std::cout << "x[" << i << "] = " << x[i] << '\n';
+        bigA[i * bigN + i] = 1.0;
+        bigB[i] = 1.0;
     }
 
-    std::cout << "\n=== residual ===\n";
+    cout << "Status: "
+        << solve(bigA, bigB, bigX, bigN) << '\n';
 
-    double error = residual(A, b, x, n);
+    cout << "First result: " << bigX[0] << '\n';
+    cout << "Last result: " << bigX[bigN - 1] << '\n';
 
-    std::cout << "Residual: " << error << '\n';
+    delete[] bigA;
+    delete[] bigB;
+    delete[] bigX;
 
-    std::cout << "\n=== checkSolution ===\n";
+    cout << "\n[TEST 8] Null pointers\n";
+    cout << "Not executed directly because it may crash.\n";
 
-    int valid = checkSolution(A, b, x, n, 1e-9);
+    cout << "\n[TEST 9] Gaussian elimination\n";
 
-    std::cout << "Check result: " << valid << '\n';
-
-    if (valid == 1)
-    {
-        std::cout << "Solution verification passed.\n";
-    }
-    else
-    {
-        std::cout << "Solution verification failed.\n";
-    }
-
-    std::cout << "\n=== gaussianElimination ===\n";
-
-    double matrix[n * (n + 1)] = {
+    double matrix[] = {
          2,  1, -1,   8,
         -3, -1,  2, -11,
         -2,  1,  2,  -3
     };
 
-    int gaussianStatus = gaussianElimination(matrix, n);
+    cout << "Status: "
+        << gaussianElimination(matrix, n) << '\n';
 
-    std::cout << "Status: " << gaussianStatus << '\n';
-
-    std::cout << "Matrix after elimination:\n";
-
-    for (int i = 0; i < n; ++i)
-    {
-        for (int j = 0; j < n + 1; ++j)
-        {
-            std::cout << std::setw(12)
-                << matrix[i * (n + 1) + j];
-        }
-
-        std::cout << '\n';
-    }
+    cout << "Completed.\n";
 
     FreeLibrary(dll);
-
-    std::cout << "\nLinearSystemLib.dll unloaded successfully!\n";
 
     return 0;
 }

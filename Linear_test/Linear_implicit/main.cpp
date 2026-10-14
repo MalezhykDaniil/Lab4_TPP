@@ -1,10 +1,18 @@
+#include <Windows.h>
 #include <iostream>
 #include <iomanip>
+#include <cmath>
 #include "LinearSystem.h"
+
+using namespace std;
 
 int main()
 {
-    std::cout << std::fixed << std::setprecision(6);
+    cout << fixed << setprecision(6);
+
+    cout << "=== LINEAR SYSTEM SDK: IMPLICIT LINKING ===\n";
+
+    cout << "\n[TEST 1] Normal system\n";
 
     const int n = 3;
 
@@ -17,57 +25,115 @@ int main()
     const double b[n] = { 8, -11, -3 };
     double x[n] = {};
 
-    std::cout << "=== solve ===\n";
-
     int status = solve(A, b, x, n);
 
-    std::cout << "Status: " << status << '\n';
+    cout << "Status: " << status << '\n';
+    cout << "Solution: ";
 
-    for (int i = 0; i < n; ++i)
+    for (int i = 0; i < n; i++)
+        cout << x[i] << " ";
+
+    cout << "\nExpected: 2 3 -1\n";
+
+    cout << "Residual: " << residual(A, b, x, n) << '\n';
+    cout << "Check: "
+        << checkSolution(A, b, x, n, 1e-9) << '\n';
+
+    cout << "\n[TEST 2] Zero size\n";
+
+    double dummyA[] = { 1 };
+    double dummyB[] = { 1 };
+    double dummyX[] = { 0 };
+
+    cout << "Returned status: "
+        << solve(dummyA, dummyB, dummyX, 0) << '\n';
+
+    cout << "\n[TEST 3] Negative size\n";
+
+    cout << "Returned status: "
+        << solve(dummyA, dummyB, dummyX, -1) << '\n';
+
+    cout << "\n[TEST 4] Singular matrix\n";
+
+    const double singularA[] = {
+        1, 2,
+        2, 4
+    };
+
+    const double singularB[] = { 3, 6 };
+    double singularX[2] = {};
+
+    int singularStatus = solve(
+        singularA, singularB, singularX, 2
+    );
+
+    cout << "Status: " << singularStatus << '\n';
+    cout << "Solution: "
+        << singularX[0] << " "
+        << singularX[1] << '\n';
+
+    cout << "\n[TEST 5] Negative tolerance\n";
+
+    cout << "Returned value: "
+        << checkSolution(A, b, x, n, -1.0) << '\n';
+
+    cout << "\n[TEST 6] Large numeric values\n";
+
+    const double largeA[] = {
+        1e100, 0,
+        0, 1e100
+    };
+
+    const double largeB[] = { 1e100, 1e100 };
+    double largeX[2] = {};
+
+    int largeStatus = solve(largeA, largeB, largeX, 2);
+
+    cout << "Status: " << largeStatus << '\n';
+    cout << "Solution: "
+        << largeX[0] << " " << largeX[1] << '\n';
+
+    cout << "\n[TEST 7] Large system (128x128)\n";
+
+    const int bigN = 128;
+
+    double* bigA = new double[bigN * bigN]();
+    double* bigB = new double[bigN]();
+    double* bigX = new double[bigN]();
+
+    for (int i = 0; i < bigN; i++)
     {
-        std::cout << "x[" << i << "] = " << x[i] << '\n';
+        bigA[i * bigN + i] = 1.0;
+        bigB[i] = 1.0;
     }
 
-    std::cout << "\n=== residual ===\n";
+    int bigStatus = solve(bigA, bigB, bigX, bigN);
 
-    double error = residual(A, b, x, n);
+    cout << "Status: " << bigStatus << '\n';
+    cout << "First result: " << bigX[0] << '\n';
+    cout << "Last result: " << bigX[bigN - 1] << '\n';
 
-    std::cout << "Residual: " << error << '\n';
+    delete[] bigA;
+    delete[] bigB;
+    delete[] bigX;
 
-    std::cout << "\n=== checkSolution ===\n";
+    cout << "\n[TEST 8] Null pointers\n";
+    cout << "This test is intentionally NOT executed directly.\n";
+    cout << "A nullptr may cause an access violation if the DLL "
+        "does not validate pointers.\n";
 
-    int valid = checkSolution(A, b, x, n, 1e-9);
+    cout << "\n[TEST 9] Gaussian elimination\n";
 
-    std::cout << "Check result: " << valid << '\n';
-
-    if (valid == 1)
-        std::cout << "Solution verification passed.\n";
-    else
-        std::cout << "Solution verification failed.\n";
-
-    std::cout << "\n=== gaussianElimination ===\n";
-
-    double matrix[n * (n + 1)] = {
+    double matrix[] = {
          2,  1, -1,   8,
         -3, -1,  2, -11,
         -2,  1,  2,  -3
     };
 
-    int gaussianStatus = gaussianElimination(matrix, n);
+    cout << "Status: "
+        << gaussianElimination(matrix, n) << '\n';
 
-    std::cout << "Status: " << gaussianStatus << '\n';
-    std::cout << "Matrix after elimination:\n";
-
-    for (int i = 0; i < n; ++i)
-    {
-        for (int j = 0; j < n + 1; ++j)
-        {
-            std::cout << std::setw(12)
-                << matrix[i * (n + 1) + j];
-        }
-
-        std::cout << '\n';
-    }
+    cout << "Completed.\n";
 
     return 0;
 }
